@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  sigr:
+    build: .
+    container_name: sigr-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - JWT_SECRET=sigr_secret_key_2026
+      - NODE_ENV=development
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

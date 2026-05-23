@@ -1,0 +1,101 @@
+name: SIGR CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  # ============ ETAPA 1: BUILD ============
+  build:
+    name: Build - Construccion del proyecto
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v3
+
+      - name: Configurar Node.js 18
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Verificar estructura del proyecto
+        run: |
+          echo "Verificando archivos criticos..."
+          test -f src/index.js && echo "index.js OK"
+          test -f src/auth/auth.service.js && echo "auth.service.js OK"
+          test -f Dockerfile && echo "Dockerfile OK"
+
+  # ============ ETAPA 2: TEST ============
+  test:
+    name: Test - Pruebas automatizadas
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v3
+
+      - name: Configurar Node.js 18
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Instalar dependencias (con devDependencies)
+        run: npm install
+
+      - name: Ejecutar pruebas de autenticacion
+        run: npm run test:auth
+
+      - name: Ejecutar pruebas de integracion
+        run: npm run test:integration
+
+      - name: Generar reporte de cobertura
+        run: npm test -- --coverage --coverageReporters=text
+
+  # ============ ETAPA 3: DOCKER BUILD ============
+  docker-build:
+    name: Docker - Construccion de imagen
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v3
+
+      - name: Construir imagen Docker
+        run: |
+          docker build -t sigr:${{ github.sha }} .
+          docker tag sigr:${{ github.sha }} sigr:latest
+          echo "Imagen construida: sigr:${{ github.sha }}"
+
+      - name: Verificar imagen con healthcheck
+        run: |
+          docker run -d -p 3000:3000 --name sigr-test sigr:latest
+          sleep 10
+          curl -f http://localhost:3000/health || exit 1
+          echo "Healthcheck exitoso"
+          docker stop sigr-test
+          docker rm sigr-test
+
+  # ============ ETAPA 4: DEPLOY (solo rama main) ============
+  deploy:
+    name: Deploy - Despliegue en produccion
+    runs-on: ubuntu-latest
+    needs: docker-build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout del codigo
+        uses: actions/checkout@v3
+
+      - name: Simular despliegue en produccion
+        run: |
+          echo "Desplegando SIGR version ${{ github.sha }}"
+          echo "Ambiente: PRODUCCION"
+          echo "Sistema de restaurante activo"
+          echo "Deploy completado exitosamente"
